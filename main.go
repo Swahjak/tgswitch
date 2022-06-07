@@ -24,6 +24,8 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"github.com/pborman/getopt"
+	"github.com/hashicorp/hcl2/gohcl"
+	"github.com/hashicorp/hcl2/hclparse"
 	lib "github.com/warrensbox/tgswitch/lib"
 )
 
@@ -32,6 +34,7 @@ const (
 	defaultBin     = "/usr/local/bin/terragrunt" //default bin installation dir
 	rcFilename     = ".tgswitchrc"
 	tgvFilename    = ".terragrunt-version"
+	tgHclFilename  = "terragrunt.hcl"
 	installVersion = "terragrunt_"
 	proxyUrl       = "https://warrensbox.github.io/terragunt-versions-list/index.json"
 )
@@ -54,8 +57,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	tgvfile := dir + fmt.Sprintf("/%s", tgvFilename) //settings for .terragrunt-version file in current directory (tgenv compatible)
-	rcfile := dir + fmt.Sprintf("/%s", rcFilename)   //settings for .tgswitchrc file in current directory
+	tgvfile := dir + fmt.Sprintf("/%s", tgvFilename)      //settings for .terragrunt-version file in current directory (tgenv compatible)
+	rcfile := dir + fmt.Sprintf("/%s", rcFilename)        //settings for .tgswitchrc file in current directory
+	tgfHclile := dir + fmt.Sprintf("/%s", tgHclFilename)  //settings for terragrunt.hcl file in current directory
 
 	if *versionFlag {
 		fmt.Printf("\nVersion: %v\n", version)
@@ -85,7 +89,6 @@ func main() {
 			} else {
 				os.Exit(1)
 			}
-
 		} else if _, err := os.Stat(tgvfile); err == nil && len(args) == 0 {
 			fmt.Printf("Reading required terragrunt version %s \n", tgvFilename)
 
@@ -108,7 +111,21 @@ func main() {
 			} else {
 				os.Exit(1)
 			}
-
+		} else if _, err := os.Stat(tgfHclile); err == nil && len(args) == 0 {
+			fmt.Printf("Terragrunt file found: %s\n", *tgFile)
+			parser := hclparse.NewParser()
+			file, diags := parser.ParseHCLFile(*tgFile) //use hcl parser to parse HCL file
+			if diags.HasErrors() {
+				fmt.Println("Unable to parse HCL file")
+				os.Exit(1)
+			}
+			var version terragruntVersionConstraints
+			gohcl.DecodeBody(file.Body, nil, &version)
+			if lib.ValidVersionFormat(&version.TerragruntVersionConstraint) && lib.VersionExist(&version.TerragruntVersionConstraint, listOfVersions) { //check if version format is correct && if version exist
+				lib.Install(&version.TerragruntVersionConstraint, *custBinPath, terragruntURL)
+			} else {
+				os.Exit(1)
+			}
 		} else if len(args) == 1 {
 			requestedVersion := args[0]
 
